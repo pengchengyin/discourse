@@ -27,7 +27,7 @@ services:
   web:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.app
     container_name: discourse-web
     restart: unless-stopped
     depends_on:

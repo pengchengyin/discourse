@@ -19,14 +19,11 @@ WORKDIR ${APP_ROOT}
 
 COPY . ${APP_ROOT}
 
-# 解决 git dubious ownership 问题
 RUN git config --global --add safe.directory ${APP_ROOT} || true
 
-# 安装 Ruby 依赖
 RUN bundle config set path vendor/bundle \
     && bundle install --jobs 4 --retry 3
 
-# 安装前端依赖，兼容 pnpm / yarn 两种情况
 RUN corepack enable || true; \
     if [ -f pnpm-lock.yaml ]; then \
       pnpm install --frozen-lockfile; \
