@@ -17,7 +17,6 @@ message_bus_redis_host = redis
 message_bus_redis_port = 6379
 message_bus_redis_db = 0
 
-# 开发环境关闭邮件发送，避免未配置 SMTP 时卡在激活邮件
 smtp_address =
 smtp_port = 587
 smtp_user_name =
@@ -70,7 +69,8 @@ until nc -z redis 6379; do
 done
 
 echo "Preparing database..."
-bundle exec rake db:create db:migrate
+bundle exec rake db:create
+bundle exec rake db:migrate
 
 echo "Applying development site settings and activating users..."
 
@@ -78,64 +78,33 @@ bundle exec rails runner "
   admin_email = ENV.fetch('DISCOURSE_DEVELOPER_EMAILS', 'admin@example.com').split(',').first.strip
   admin_password = ENV.fetch('DISCOURSE_ADMIN_PASSWORD', 'Admin@123456')
 
-  # 关闭人工审批
-  if SiteSetting.respond_to?(:must_approve_users=)
-    SiteSetting.must_approve_users = false
-  end
-
-  # 禁用邮件发送
-  if SiteSetting.respond_to?(:disable_emails=)
-    SiteSetting.disable_emails = 'yes'
-  end
-
-  # 允许本地账号登录
-  if SiteSetting.respond_to?(:enable_local_logins=)
-    SiteSetting.enable_local_logins = true
-  end
-
-  # 不强制登录浏览
-  if SiteSetting.respond_to?(:login_required=)
-    SiteSetting.login_required = false
-  end
-
-  # 开发环境下避免部分邮件相关流程阻塞
-  if SiteSetting.respond_to?(:email_editable=)
-    SiteSetting.email_editable = true
-  end
+  SiteSetting.must_approve_users = false if SiteSetting.respond_to?(:must_approve_users=)
+  SiteSetting.disable_emails = 'yes' if SiteSetting.respond_to?(:disable_emails=)
+  SiteSetting.enable_local_logins = true if SiteSetting.respond_to?(:enable_local_logins=)
+  SiteSetting.login_required = false if SiteSetting.respond_to?(:login_required=)
 
   user = User.find_by_email(admin_email)
 
   if user.nil?
-    puts \"Admin user not found, creating: #{admin_email}\"
-
     username = admin_email.split('@').first.gsub(/[^a-zA-Z0-9_]/, '_')
+
+    puts \"Admin user not found, creating: #{admin_email}\"
 
     user = User.new(
       username: username,
       name: 'Admin',
       email: admin_email,
-      password: admin_password,
-      password_confirmation: admin_password,
       active: true,
       approved: true,
       admin: true,
       moderator: true
     )
 
-    user.save!
+    user.save!(validate: false)
   else
     puts \"Admin user found: #{admin_email}\"
-
-    user.password = admin_password
-    user.password_confirmation = admin_password
-    user.admin = true
-    user.moderator = true
-    user.active = true
-    user.approved = true
-    user.save!
   end
 
-  # 强制激活 admin
   user.update_columns(
     active: true,
     approved: true,
@@ -145,25 +114,50 @@ bundle exec rails runner "
     moderator: true
   )
 
-  # 确认 admin 邮箱 token
   begin
-    user.email_tokens.update_all(confirmed: true) if user.respond_to?(:email_tokens)
-  rescue => e
-    puts \"Skip confirming admin email_tokens: #{e.message}\"
-  end
+    if defined?(UserEmail)
+      existing = UserEmail.find_by(user_id: user.id, email: admin_email)
 
-  # 确认 user_emails，兼容新版 Discourse 结构
-  begin
-    if user.respond_to?(:user_emails)
-      user.user_emails.update_all(primary: true)
+      if existing
+        existing.update_columns(primary: true, confirmed: true)
+      else
+        UserEmail.create!(
+          user_id: user.id,
+          email: admin_email,
+          primary: true,
+          confirmed: true
+        )
+      end
+
+      UserEmail.where(user_id: user.id).update_all(confirmed: true)
     end
   rescue => e
-    puts \"Skip updating admin user_emails: #{e.message}\"
+    puts \"Skip updating admin UserEmail: #{e.class}: #{e.message}\"
   end
 
-  puts \"Admin user ready: #{admin_email} / #{admin_password}\"
+  begin
+    EmailToken.where(user_id: user.id).update_all(confirmed: true) if defined?(EmailToken)
+  rescue => e
+    puts \"Skip updating admin EmailToken: #{e.class}: #{e.message}\"
+  end
 
-  # 激活其他未激活用户
+  begin
+    user.activate if user.respond_to?(:activate)
+  rescue => e
+    puts \"Skip user.activate: #{e.class}: #{e.message}\"
+  end
+
+  begin
+    if defined?(PasswordResetter)
+      PasswordResetter.new(user).reset_password(admin_password)
+      puts \"Admin password reset by PasswordResetter\"
+    else
+      puts \"PasswordResetter not defined, skip password reset\"
+    end
+  rescue => e
+    puts \"Skip password reset: #{e.class}: #{e.message}\"
+  end
+
   User.where(active: false).find_each do |u|
     begin
       u.update_columns(
@@ -173,13 +167,16 @@ bundle exec rails runner "
         approved_by_id: -1
       )
 
-      u.email_tokens.update_all(confirmed: true) if u.respond_to?(:email_tokens)
+      UserEmail.where(user_id: u.id).update_all(confirmed: true) if defined?(UserEmail)
+      EmailToken.where(user_id: u.id).update_all(confirmed: true) if defined?(EmailToken)
 
       puts \"Activated user: #{u.id} / #{u.email}\"
     rescue => e
-      puts \"Skip user #{u.id}: #{e.message}\"
+      puts \"Skip user #{u.id}: #{e.class}: #{e.message}\"
     end
   end
+
+  puts \"Admin ready: #{admin_email} / #{admin_password}\"
 "
 
 echo "Starting Discourse Rails server..."
