@@ -1,11 +1,10 @@
-version: "3.9"
-
 services:
   postgres:
     image: pgvector/pgvector:pg15
     container_name: discourse-postgres
     restart: unless-stopped
     environment:
+      POSTGRES_DB: discourse
       POSTGRES_USER: discourse
       POSTGRES_PASSWORD: discourse
     volumes:
@@ -33,11 +32,9 @@ services:
       - postgres
       - redis
     environment:
-      RAILS_ENV: development
-      RACK_ENV: development
-      NODE_ENV: development
-      # 允许ember cli代理绕过
-      ALLOW_EMBER_CLI_PROXY_BYPASS: "1"
+      RAILS_ENV: production
+      RACK_ENV: production
+      NODE_ENV: production
 
       DISCOURSE_HOSTNAME: localhost
       DISCOURSE_DEVELOPER_EMAILS: admin@example.com
@@ -45,18 +42,22 @@ services:
 
       DISCOURSE_DB_HOST: postgres
       DISCOURSE_DB_PORT: 5432
-      DISCOURSE_DB_NAME: discourse_development
+      DISCOURSE_DB_NAME: discourse
       DISCOURSE_DB_USERNAME: discourse
       DISCOURSE_DB_PASSWORD: discourse
 
       DISCOURSE_REDIS_HOST: redis
       DISCOURSE_REDIS_PORT: 6379
+      DISCOURSE_REDIS_URL: redis://redis:6379
       REDIS_URL: redis://redis:6379
 
       DISCOURSE_SMTP_ADDRESS: ""
       DISCOURSE_SMTP_PORT: 587
       DISCOURSE_SMTP_USER_NAME: ""
       DISCOURSE_SMTP_PASSWORD: ""
+
+      # 单容器测试环境可以先关掉邮件
+      DISCOURSE_DISABLE_EMAILS: "yes"
     ports:
       - "3000:3000"
     volumes:

@@ -9,6 +9,12 @@ cat > config/discourse.conf <<'EOF'
 hostname = localhost
 developer_emails = admin@example.com
 
+db_host = postgres
+db_port = 5432
+db_name = discourse
+db_username = discourse
+db_password = discourse
+
 redis_host = redis
 redis_port = 6379
 redis_db = 0
@@ -21,11 +27,28 @@ smtp_address =
 smtp_port = 587
 smtp_user_name =
 smtp_password =
+
+# 测试/内网环境关闭邮件发送
+disable_emails = yes
 EOF
 
 echo "Generating config/database.yml..."
 
 cat > config/database.yml <<'EOF'
+production:
+  prepared_statements: false
+  adapter: postgresql
+  database: discourse
+  username: discourse
+  password: discourse
+  host: postgres
+  port: 5432
+  min_messages: warning
+  pool: 8
+  checkout_timeout: 5
+  host_names:
+    - localhost
+
 development:
   prepared_statements: false
   adapter: postgresql
@@ -68,15 +91,16 @@ until nc -z redis 6379; do
   sleep 2
 done
 
-echo "Preparing database..."
+echo "Preparing production database..."
+
 bundle exec rake db:create
 bundle exec rake db:migrate
 
-echo "Applying development site settings and activating users..."
+echo "Applying site settings and activating admin user..."
 
 bundle exec rails runner "
   admin_email = ENV.fetch('DISCOURSE_DEVELOPER_EMAILS', 'admin@example.com').split(',').first.strip
-  admin_password = ENV.fetch('DISCOURSE_ADMIN_PASSWORD', 'Admin@123456')
+  admin_password = ENV.fetch('DISCOURSE_ADMIN_PASSWORD', 'Admin@1234567890')
 
   SiteSetting.must_approve_users = false if SiteSetting.respond_to?(:must_approve_users=)
   SiteSetting.disable_emails = 'yes' if SiteSetting.respond_to?(:disable_emails=)
@@ -178,6 +202,13 @@ bundle exec rails runner "
 
   puts \"Admin ready: #{admin_email} / #{admin_password}\"
 "
+
+if [ ! -f public/assets/manifest.json ] && [ ! -f public/assets/.sprockets-manifest-* ]; then
+  echo "Assets manifest not found, precompiling assets..."
+  bundle exec rake assets:precompile
+else
+  echo "Assets already precompiled, skip assets:precompile"
+fi
 
 echo "Starting Discourse Rails server..."
 
