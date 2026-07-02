@@ -45,15 +45,7 @@ RUN rm -rf node_modules app/assets/javascripts/*/node_modules \
 
 EXPOSE 3000
 
-CMD ["bash", "-lc", "\
-  export DISCOURSE_REDIS_HOST=redis; \
-  export DISCOURSE_REDIS_PORT=6379; \
-  export REDIS_URL=redis://redis:6379; \
-  git config --global --add safe.directory /var/www/discourse || true; \
-  echo 'Waiting for postgres...'; \
-  until nc -z postgres 5432; do sleep 2; done; \
-  echo 'Waiting for redis...'; \
-  until nc -z redis 6379; do sleep 2; done; \
-  bundle exec rake db:create db:migrate; \
-  bundle exec rails server -b 0.0.0.0 -p 3000 \
-"]
+COPY docker-entrypoint.app.sh /usr/local/bin/docker-entrypoint.app.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.app.sh
+
+CMD ["/usr/local/bin/docker-entrypoint.app.sh"]
