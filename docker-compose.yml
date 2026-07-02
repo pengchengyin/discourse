@@ -36,6 +36,8 @@ services:
       RAILS_ENV: development
       RACK_ENV: development
       NODE_ENV: development
+      # 允许ember cli代理绕过
+      ALLOW_EMBER_CLI_PROXY_BYPASS: "1"
 
       DISCOURSE_HOSTNAME: localhost
       DISCOURSE_DEVELOPER_EMAILS: admin@example.com
