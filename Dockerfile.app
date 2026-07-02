@@ -46,9 +46,6 @@ RUN rm -rf node_modules app/assets/javascripts/*/node_modules \
       CI=true yarn install; \
     fi
 
-# production 模式预编译前端和 Rails assets
-RUN bundle exec rake assets:precompile
-
 EXPOSE 3000
 
 COPY docker-entrypoint.app.sh /usr/local/bin/docker-entrypoint.app.sh

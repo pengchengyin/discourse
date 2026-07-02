@@ -202,8 +202,7 @@ bundle exec rails runner "
 
   puts \"Admin ready: #{admin_email} / #{admin_password}\"
 "
-
-if [ ! -f public/assets/manifest.json ] && [ ! -f public/assets/.sprockets-manifest-* ]; then
+if [ ! -f public/assets/manifest.json ] && [ -z "$(ls public/assets/.sprockets-manifest-* 2>/dev/null)" ]; then
   echo "Assets manifest not found, precompiling assets..."
   bundle exec rake assets:precompile
 else
