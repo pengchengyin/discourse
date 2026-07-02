@@ -5,6 +5,7 @@ ENV RAILS_ENV=development
 ENV RACK_ENV=development
 ENV NODE_ENV=development
 ENV DISCOURSE_HOSTNAME=localhost
+ENV CI=true
 
 USER root
 
@@ -19,18 +20,22 @@ WORKDIR ${APP_ROOT}
 
 COPY . ${APP_ROOT}
 
+# 解决 Git dubious ownership 问题
 RUN git config --global --add safe.directory ${APP_ROOT} || true
 
+# 安装 Ruby 依赖
 RUN bundle config set path vendor/bundle \
     && bundle install --jobs 4 --retry 3
 
-RUN corepack enable || true; \
+# 避免把宿主机 node_modules 带进镜像后，pnpm 在无 TTY 环境中删除失败
+RUN rm -rf node_modules app/assets/javascripts/*/node_modules \
+    && corepack enable || true; \
     if [ -f pnpm-lock.yaml ]; then \
-      pnpm install --frozen-lockfile; \
+      CI=true pnpm install --frozen-lockfile; \
     elif [ -f yarn.lock ]; then \
-      yarn install --frozen-lockfile; \
+      CI=true yarn install --frozen-lockfile; \
     else \
-      yarn install; \
+      CI=true yarn install; \
     fi
 
 EXPOSE 3000
