@@ -27,7 +27,8 @@ COPY . ${APP_ROOT}
 RUN git config --global --add safe.directory ${APP_ROOT} || true
 
 # 清理基础镜像或源码中可能继承的 bundler 排除配置，确保 development 依赖被安装
-RUN bundle config unset without || true \
+RUN rm -rf .bundle \
+    && bundle config unset without || true \
     && bundle config unset deployment || true \
     && bundle config set path vendor/bundle \
     && bundle install --jobs 4 --retry 3
