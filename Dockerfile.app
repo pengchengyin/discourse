@@ -31,6 +31,7 @@ RUN rm -rf .bundle \
     && bundle config unset without || true \
     && bundle config unset deployment || true \
     && bundle config set path vendor/bundle \
+    && bundle add liquid \
     && bundle install --jobs 4 --retry 3
 
 RUN rm -rf node_modules app/assets/javascripts/*/node_modules \
