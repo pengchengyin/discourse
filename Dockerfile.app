@@ -7,6 +7,10 @@ ENV NODE_ENV=development
 ENV DISCOURSE_HOSTNAME=localhost
 ENV CI=true
 
+# 关键：不要排除 development/test 依赖
+ENV BUNDLE_WITHOUT=""
+ENV BUNDLE_DEPLOYMENT=false
+
 USER root
 
 RUN apt-get update && apt-get install -y \
@@ -20,14 +24,14 @@ WORKDIR ${APP_ROOT}
 
 COPY . ${APP_ROOT}
 
-# 解决 Git dubious ownership 问题
 RUN git config --global --add safe.directory ${APP_ROOT} || true
 
-# 安装 Ruby 依赖
-RUN bundle config set path vendor/bundle \
+# 清理基础镜像或源码中可能继承的 bundler 排除配置，确保 development 依赖被安装
+RUN bundle config unset without || true \
+    && bundle config unset deployment || true \
+    && bundle config set path vendor/bundle \
     && bundle install --jobs 4 --retry 3
 
-# 避免把宿主机 node_modules 带进镜像后，pnpm 在无 TTY 环境中删除失败
 RUN rm -rf node_modules app/assets/javascripts/*/node_modules \
     && corepack enable || true; \
     if [ -f pnpm-lock.yaml ]; then \
