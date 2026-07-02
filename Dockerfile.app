@@ -46,6 +46,9 @@ RUN rm -rf node_modules app/assets/javascripts/*/node_modules \
 EXPOSE 3000
 
 CMD ["bash", "-lc", "\
+  export DISCOURSE_REDIS_HOST=redis; \
+  export DISCOURSE_REDIS_PORT=6379; \
+  export REDIS_URL=redis://redis:6379; \
   git config --global --add safe.directory /var/www/discourse || true; \
   echo 'Waiting for postgres...'; \
   until nc -z postgres 5432; do sleep 2; done; \

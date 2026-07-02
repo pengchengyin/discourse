@@ -49,6 +49,7 @@ services:
 
       DISCOURSE_REDIS_HOST: redis
       DISCOURSE_REDIS_PORT: 6379
+      REDIS_URL: redis://redis:6379
 
       DISCOURSE_SMTP_ADDRESS: ""
       DISCOURSE_SMTP_PORT: 587
