@@ -62,7 +62,6 @@ services:
       - "3000:3000"
     volumes:
       - discourse_uploads:/var/www/discourse/public/uploads
-      - discourse_tmp:/var/www/discourse/tmp
     networks:
       - discourse_internal
 
@@ -70,7 +69,6 @@ volumes:
   postgres_data:
   redis_data:
   discourse_uploads:
-  discourse_tmp:
 
 networks:
   discourse_internal:
