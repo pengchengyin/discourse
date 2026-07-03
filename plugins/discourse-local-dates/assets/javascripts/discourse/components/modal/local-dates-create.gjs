@@ -8,6 +8,7 @@ import { trustHTML } from "@ember/template";
 import { isEmpty } from "@ember/utils";
 import { tagName } from "@ember-decorators/component";
 import { observes } from "@ember-decorators/object";
+import AdvancedModeToggle from "discourse/components/advanced-mode-toggle";
 import { debounce } from "discourse/lib/decorators";
 import { INPUT_DELAY } from "discourse/lib/environment";
 import { applyLocalDates } from "discourse/lib/local-dates";
@@ -291,13 +292,6 @@ export default class LocalDatesCreate extends Component {
     return generateDateMarkup(fromDateTime, options, isRange, toDateTime);
   }
 
-  @computed("advancedMode")
-  get toggleModeBtnLabel() {
-    return this.advancedMode
-      ? "discourse_local_dates.create.form.simple_mode"
-      : "discourse_local_dates.create.form.advanced_mode";
-  }
-
   @computed("computedConfig.{from,to,options}", "options", "isValid", "isRange")
   get markup() {
     let text;
@@ -418,7 +412,7 @@ export default class LocalDatesCreate extends Component {
     <DModal
       @title={{i18n "discourse_local_dates.title"}}
       @closeModal={{@closeModal}}
-      class="discourse-local-dates-create-modal -large"
+      class="discourse-local-dates-create-modal --large"
     >
       <:body>
         <div class="form">
@@ -613,11 +607,9 @@ export default class LocalDatesCreate extends Component {
           class="btn-flat"
         />
 
-        <DButton
-          @action={{this.toggleAdvancedMode}}
-          @icon="gear"
-          @label={{this.toggleModeBtnLabel}}
-          class="btn-default advanced-mode-btn"
+        <AdvancedModeToggle
+          @active={{this.advancedMode}}
+          @onToggle={{this.toggleAdvancedMode}}
         />
       </:footer>
     </DModal>

@@ -906,9 +906,26 @@ RSpec.describe UsersController do
         end
       end
 
+      context "when signup params include group assignments" do
+        fab!(:whisperers_group, :group)
+
+        let(:created_user) { User.find(response.parsed_body["user_id"]) }
+
+        before { SiteSetting.whispers_allowed_groups = whisperers_group.id.to_s }
+
+        it "ignores primary_group_id and flair_group_id on unauthenticated signup" do
+          post_user(primary_group_id: whisperers_group.id, flair_group_id: whisperers_group.id)
+
+          expect(response).to have_http_status(:ok)
+          expect(created_user).to have_attributes(primary_group_id: nil, flair_group_id: nil)
+          expect(created_user).not_to be_a_whisperer
+        end
+      end
+
       context "with discourse connect enabled" do
         before do
           SiteSetting.discourse_connect_url = "http://example.com/sso"
+          SiteSetting.discourse_connect_secret = "x" * 10
           SiteSetting.enable_discourse_connect = true
         end
 
@@ -2119,6 +2136,7 @@ RSpec.describe UsersController do
 
       it "should respond with proper error message if auth_overrides_username is enabled" do
         SiteSetting.discourse_connect_url = "http://someurl.com"
+        SiteSetting.discourse_connect_secret = "x" * 10
         SiteSetting.enable_discourse_connect = true
         SiteSetting.auth_overrides_username = true
         acting_user = admin
@@ -2525,6 +2543,25 @@ RSpec.describe UsersController do
           invites = response.parsed_body["invites"]
           expect(invites.size).to eq(1)
           expect(invites[0]).to include("id" => invite.id)
+        end
+      end
+
+      context "with expired invites" do
+        it "returns an empty list without permission to see invite details" do
+          viewer = Fabricate(:user, trust_level: TrustLevel[2])
+          sign_in(viewer)
+          Fabricate(:invite, invited_by: inviter, expires_at: 1.day.ago)
+
+          get "/u/#{inviter.username}/invited/expired.json"
+
+          expect(response.status).to eq(200)
+          expect(response.parsed_body["can_see_invite_details"]).to eq(false)
+          expect(response.parsed_body["invites"]).to eq([])
+          expect(response.parsed_body["counts"]).to include(
+            "pending" => 0,
+            "expired" => 0,
+            "total" => 0,
+          )
         end
       end
     end
@@ -3106,6 +3143,7 @@ RSpec.describe UsersController do
       before do
         DiscoursePluginRegistry.register_auth_provider(plugin_auth_provider)
         SiteSetting.discourse_connect_url = "http://localhost"
+        SiteSetting.discourse_connect_secret = "x" * 10
         SiteSetting.enable_discourse_connect = true
       end
 
@@ -5271,6 +5309,33 @@ RSpec.describe UsersController do
         expect(parsed["trust_level"]).to be_present
       end
 
+      it "sanitizes suspension and silencing reasons" do
+        payload = "public <img src=x onerror=alert(1)> reason"
+        penalized_user = Fabricate(:user)
+        penalized_user.user_stat.update!(post_count: 1)
+
+        UserSuspender.new(
+          penalized_user,
+          suspended_till: 2.days.from_now,
+          reason: payload,
+          by_user: admin,
+        ).suspend
+        UserSilencer.new(
+          penalized_user,
+          admin,
+          keep_posts: true,
+          reason: payload,
+          silenced_till: 2.days.from_now,
+        ).silence
+
+        get "/u/#{penalized_user.username}/card.json"
+
+        expect(response.status).to eq(200)
+        user_json = response.parsed_body["user"]
+        expect(user_json["suspend_reason"]).to eq("public  reason")
+        expect(user_json["silence_reason"]).to eq("public  reason")
+      end
+
       it "should have http status 403 for anonymous user when profiles are hidden" do
         SiteSetting.hide_user_profiles_from_public = true
         get "/u/#{user.username}/card.json"
@@ -5684,7 +5749,7 @@ RSpec.describe UsersController do
               }
           expect(response.status).to eq(200)
           groups = response.parsed_body["groups"]
-          expect(groups).to eq([{ "name" => "admins", "full_name" => nil }])
+          expect(groups).to eq([{ "name" => "admins", "full_name" => "Admins" }])
 
           DiscoursePluginRegistry.reset!
         end
@@ -6067,6 +6132,7 @@ RSpec.describe UsersController do
         describe "when SSO is enabled" do
           it "should return the right response" do
             SiteSetting.discourse_connect_url = "http://someurl.com"
+            SiteSetting.discourse_connect_secret = "x" * 10
             SiteSetting.enable_discourse_connect = true
 
             post "/users/create_second_factor_totp.json"
@@ -6370,6 +6436,7 @@ RSpec.describe UsersController do
         describe "when SSO is enabled" do
           it "should return the right response" do
             SiteSetting.discourse_connect_url = "http://someurl.com"
+            SiteSetting.discourse_connect_secret = "x" * 10
             SiteSetting.enable_discourse_connect = true
 
             put "/users/second_factors_backup.json"
@@ -7023,6 +7090,7 @@ RSpec.describe UsersController do
     context "when SSO is enabled" do
       before do
         SiteSetting.discourse_connect_url = "https://discourse.test/sso"
+        SiteSetting.discourse_connect_secret = "x" * 10
         SiteSetting.enable_discourse_connect = true
       end
 
@@ -7109,6 +7177,7 @@ RSpec.describe UsersController do
     context "when SSO is enabled" do
       before do
         SiteSetting.discourse_connect_url = "https://discourse.test/sso"
+        SiteSetting.discourse_connect_secret = "x" * 10
         SiteSetting.enable_discourse_connect = true
       end
 
@@ -8154,6 +8223,47 @@ RSpec.describe UsersController do
         expect(unread_notifications.map { |notification| notification["id"] }).to eq(
           [unread_pm_notification.id, unread_group_message_summary_notification.id],
         )
+      end
+
+      context "with notifications for inaccessible private messages" do
+        fab!(:sender, :coding_horror)
+
+        fab!(:forbidden_pm) do
+          Fabricate(
+            :private_message_topic,
+            title: "Confidential Acquisition Plan",
+            user: sender,
+            recipient: user,
+          )
+        end
+
+        fab!(:forbidden_post) { Fabricate(:post, topic: forbidden_pm, user: sender) }
+
+        fab!(:forbidden_pm_notification) do
+          Fabricate(
+            :private_message_notification,
+            read: false,
+            user: user,
+            topic: forbidden_pm,
+            post: forbidden_post,
+            created_at: 3.minutes.ago,
+          )
+        end
+
+        before { TopicAllowedUser.where(topic: forbidden_pm, user: user).delete_all }
+
+        it "does not disclose titles of PMs the user can no longer access" do
+          get "/u/#{user.username}/user-menu-private-messages"
+
+          expect(response.status).to eq(200)
+          expect(response.body).not_to include(forbidden_pm.title)
+          expect(
+            response.parsed_body["unread_notifications"].map { |notification| notification["id"] },
+          ).to contain_exactly(
+            unread_pm_notification.id,
+            unread_group_message_summary_notification.id,
+          )
+        end
       end
 
       it "sends an array of read group_message_summary notifications" do

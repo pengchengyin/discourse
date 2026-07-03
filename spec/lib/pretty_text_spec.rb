@@ -2498,6 +2498,17 @@ HTML
     expect(PrettyText.cook("<test>alert(42)</test>")).to eq "<p>alert(42)</p>"
   end
 
+  it "sanitizes html without cooking markdown" do
+    sanitized =
+      PrettyText.sanitize(
+        '<a href="https://example.com" target="_blank" rel="noopener" onclick="alert(1)">learn more</a><a href="javascript:alert(1)">bad</a><script>alert(1)</script>',
+      )
+
+    expect(sanitized).to eq(
+      '<a href="https://example.com" target="_blank">learn more</a><a>bad</a>',
+    )
+  end
+
   it "should not onebox magically linked urls" do
     expect(PrettyText.cook("[url]site.com[/url]")).not_to include("onebox")
   end
@@ -2566,6 +2577,60 @@ HTML
       HTML
 
       expect(cooked).to eq(html.strip)
+    end
+  end
+
+  describe "upload:// links" do
+    it "treats the label as literal so formatting characters are preserved" do
+      cooked = PrettyText.cook <<~MD
+        ![_test_file_|100x100](upload://abc.jpg)
+        [_test_file_.txt|attachment](upload://abc.txt)
+      MD
+
+      expect(cooked).to include('alt="_test_file_"')
+      expect(cooked).to include('class="attachment"')
+      expect(cooked).to include(">_test_file_.txt<")
+      expect(cooked).not_to include("<em>")
+    end
+
+    it "unescapes backslash escapes left over from legacy posts" do
+      cooked = PrettyText.cook("![20260421\\_140231|100x100](upload://abc.jpg)")
+
+      expect(cooked).to include('alt="20260421_140231"')
+    end
+
+    it "leaves non-upload links alone" do
+      cooked = PrettyText.cook("[_foo_](http://example.com)")
+
+      expect(cooked).to include("<em>foo</em>")
+    end
+
+    it "keeps plain URLs in the label intact when they would otherwise linkify" do
+      cooked = PrettyText.cook("![foo https://example.com bar|100x100](upload://abc.jpg)")
+
+      expect(cooked).to include('alt="foo https://example.com bar"')
+    end
+
+    it "keeps hashtags and mentions in the label literal" do
+      cooked = PrettyText.cook("[#cat @sam|attachment](upload://abc.txt)")
+
+      expect(cooked).to include(">#cat @sam<")
+      expect(cooked).not_to include("hashtag")
+      expect(cooked).not_to include("mention")
+    end
+
+    it "treats reference-style upload labels as literal too" do
+      cooked = PrettyText.cook("[_foo_][1]\n\n[1]: upload://abc.jpg")
+
+      expect(cooked).to include(">_foo_<")
+      expect(cooked).not_to include("<em>")
+    end
+
+    it "still renders inline formatting in non-upload attachment labels" do
+      cooked = PrettyText.cook("[**bold**|attachment](https://example.com/file.pdf)")
+
+      expect(cooked).to include('class="attachment"')
+      expect(cooked).to include("<strong>bold</strong>")
     end
   end
 

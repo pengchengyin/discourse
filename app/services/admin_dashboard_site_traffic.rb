@@ -2,6 +2,7 @@
 
 class AdminDashboardSiteTraffic
   DEFAULT_RANGE_DAYS = 30
+  TOP_CARD_LIMIT = 5
   SERIES_LABEL_REQS = {
     logged_in: "page_view_logged_in_browser",
     anonymous: "page_view_anon_browser",
@@ -9,13 +10,15 @@ class AdminDashboardSiteTraffic
     crawlers: "page_view_crawler",
   }.freeze
   private_constant :DEFAULT_RANGE_DAYS
+  private_constant :TOP_CARD_LIMIT
   private_constant :SERIES_LABEL_REQS
 
-  def self.build(start_date:, end_date:)
-    new(start_date: start_date, end_date: end_date).build
+  def self.build(start_date:, end_date:, guardian:)
+    new(start_date: start_date, end_date: end_date, guardian: guardian).build
   end
 
-  def initialize(start_date:, end_date:)
+  def initialize(start_date:, end_date:, guardian:)
+    @guardian = guardian
     @start_date = parse_date(start_date) || (DEFAULT_RANGE_DAYS - 1).days.ago.beginning_of_day
     @end_date = parse_date(end_date)&.end_of_day || Time.zone.now.end_of_day
 
@@ -37,8 +40,11 @@ class AdminDashboardSiteTraffic
     }
 
     if SiteSetting.persist_browser_pageview_events
-      response[:top_countries] = fetch_card("top_countries_by_browser_pageviews")
-      response[:top_referrers] = fetch_card("top_referrers_by_browser_pageviews")
+      top_countries = fetch_card("top_countries_by_browser_pageviews")
+      response[:top_countries] = top_countries if top_countries
+
+      top_referrers = fetch_card("top_referrers_by_browser_pageviews")
+      response[:top_referrers] = top_referrers if top_referrers
     end
 
     response
@@ -46,17 +52,19 @@ class AdminDashboardSiteTraffic
 
   private
 
-  attr_reader :start_date, :end_date
+  attr_reader :start_date, :end_date, :guardian
 
   def fetch_card(type)
+    return nil if Report.hidden?(type, guardian: guardian)
+
     opts = {
       start_date: start_date,
       end_date: end_date,
+      guardian: guardian,
       filters: {
         login_required: SiteSetting.login_required,
         host: Discourse.current_hostname,
       },
-      limit: 5,
       wrap_exceptions_in_test: true,
     }
 
@@ -72,14 +80,14 @@ class AdminDashboardSiteTraffic
 
     return { rows: [], error: report.error.to_s } if report.error.present?
 
-    { rows: report.data, error: nil }
+    { rows: report.data.first(TOP_CARD_LIMIT), error: nil }
   end
 
   def cached_to_payload(cached)
     error = cached[:error]
     return { rows: [], error: error.to_s } if error.present?
 
-    { rows: (cached[:data] || []).map(&:symbolize_keys), error: nil }
+    { rows: (cached[:data] || []).map(&:symbolize_keys).first(TOP_CARD_LIMIT), error: nil }
   end
 
   def series_ids(include_embedded:)
@@ -100,6 +108,9 @@ class AdminDashboardSiteTraffic
 
     kpis[:logged_in_share] = { value: logged_in_share } if !logged_in_share.nil?
 
+    direct_traffic = direct_traffic_value
+    kpis[:direct_traffic] = { value: direct_traffic } if !direct_traffic.nil?
+
     kpis
   end
 
@@ -116,6 +127,25 @@ class AdminDashboardSiteTraffic
     return nil if login_required?
 
     totals[:human].positive? ? ((totals[:logged_in].to_f / totals[:human]) * 100).round : 0
+  end
+
+  def direct_traffic_value
+    return nil if !SiteSetting.persist_browser_pageview_events
+
+    count_column = login_required? ? "logged_in_count" : "count"
+
+    row = DB.query(<<~SQL, start_date: start_date.to_date, end_date: end_date.to_date).first
+          SELECT
+            COALESCE(SUM(#{count_column}), 0)::bigint AS total,
+            COALESCE(SUM(#{count_column}) FILTER (WHERE normalized_referrer IS NULL), 0)::bigint AS direct
+          FROM browser_pageview_referrer_daily_rollups
+          WHERE date >= :start_date
+            AND date <= :end_date
+        SQL
+
+    return nil if row.total.zero?
+
+    ((row.direct.to_f / row.total) * 100).round
   end
 
   def pageview_series(rows, include_embedded:)

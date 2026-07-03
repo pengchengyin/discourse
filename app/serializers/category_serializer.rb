@@ -43,7 +43,6 @@ class CategorySerializer < SiteCategorySerializer
              :style_type,
              :emoji,
              :icon,
-             :category_types,
              :category_type_settings,
              :available_category_types
 
@@ -162,14 +161,6 @@ class CategorySerializer < SiteCategorySerializer
     category_description
   end
 
-  def include_category_types?
-    can_edit_category?
-  end
-
-  def category_types
-    object.category_types
-  end
-
   def include_category_type_settings?
     can_edit_category?
   end
@@ -189,6 +180,6 @@ class CategorySerializer < SiteCategorySerializer
   end
 
   def available_category_types
-    Categories::TypeRegistry.list(only_visible: true)
+    Categories::TypeRegistry.list(only_visible: true, guardian: scope)
   end
 end

@@ -9,6 +9,7 @@ import { isTesting } from "discourse/lib/environment";
 import getURL, { withoutPrefix } from "discourse/lib/get-url";
 import LockOn from "discourse/lib/lock-on";
 import offsetCalculator from "discourse/lib/offset-calculator";
+import { applyValueTransformer } from "discourse/lib/transformer";
 import { defaultHomepage } from "discourse/lib/utilities";
 import Category from "discourse/models/category";
 import Session from "discourse/models/session";
@@ -312,7 +313,10 @@ class DiscourseURL extends EmberObject {
   }
 
   routeToUrl(url, opts = {}) {
-    this.routeTo(getURL(url), opts);
+    const transformedUrl = applyValueTransformer("route-to-url", getURL(url), {
+      opts,
+    });
+    this.routeTo(transformedUrl, opts);
   }
 
   rewrite(regexp, replacement, opts) {
@@ -373,7 +377,7 @@ class DiscourseURL extends EmberObject {
 
     const internalPath = url.replace(this.origin, "");
 
-    return internalPath.startsWith("/t/") || internalPath.startsWith("/n/");
+    return internalPath.startsWith("/t/");
   }
 
   /**
@@ -389,11 +393,17 @@ class DiscourseURL extends EmberObject {
       const oldMatches = TOPIC_URL_REGEXP.exec(oldPath);
       const oldTopicId = oldMatches ? oldMatches[2] : null;
 
+      // Nested topics use the topic route too, but post-number changes need to
+      // run the route model hook so it can load the nested context payload.
+      const topicController = this.container.lookup("controller:topic");
+      if (topicController.shouldRenderNestedView) {
+        return false;
+      }
+
       // If the topic_id is the same
       if (oldTopicId === newTopicId) {
         this.replaceState(path);
 
-        const topicController = this.container.lookup("controller:topic");
         const opts = {};
         const postStream = topicController.get("model.postStream");
 

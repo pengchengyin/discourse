@@ -95,6 +95,15 @@ export default class DashboardTraffic extends Component {
     return `${this.args.traffic?.kpis?.logged_in_share?.value ?? 0}%`;
   }
 
+  get showDirectTraffic() {
+    const directTraffic = this.args.traffic?.kpis?.direct_traffic?.value;
+    return directTraffic !== null && directTraffic !== undefined;
+  }
+
+  get directTraffic() {
+    return `${this.args.traffic?.kpis?.direct_traffic?.value ?? 0}%`;
+  }
+
   get chartModel() {
     return {
       start_date: this.args.startDate,
@@ -211,7 +220,7 @@ export default class DashboardTraffic extends Component {
                 <DTooltip
                   class="db-section__info"
                   @identifier="site-traffic-comparison-tooltip"
-                  @icon="circle-question"
+                  @icon="far-circle-question"
                 >
                   <:content>{{this.comparisonTooltipText}}</:content>
                 </DTooltip>
@@ -224,29 +233,55 @@ export default class DashboardTraffic extends Component {
             </p> }}
           </div>
 
-          {{#if this.showLoggedInShare}}
+          {{#if (or this.showLoggedInShare this.showDirectTraffic)}}
             <div class="db-section__metrics">
-              <div class="db-section__metric">
-                <div
-                  class="db-section__metric-number"
-                >{{this.loggedInShare}}</div>
-                <div class="db-section__metric-label">
-                  {{i18n
-                    "admin.dashboard.site_traffic.kpi.logged_in_share.label"
-                  }}
-                  <DTooltip
-                    class="db-section__info"
-                    @identifier="site-traffic-logged-in-share-tooltip"
-                    @icon="circle-question"
-                  >
-                    <:content>
-                      {{i18n
-                        "admin.dashboard.site_traffic.kpi.logged_in_share.tooltip"
-                      }}
-                    </:content>
-                  </DTooltip>
+              {{#if this.showLoggedInShare}}
+                <div class="db-section__metric">
+                  <div
+                    class="db-section__metric-number"
+                  >{{this.loggedInShare}}</div>
+                  <div class="db-section__metric-label">
+                    {{i18n
+                      "admin.dashboard.site_traffic.kpi.logged_in_share.label"
+                    }}
+                    <DTooltip
+                      class="db-section__info"
+                      @identifier="site-traffic-logged-in-share-tooltip"
+                      @icon="far-circle-question"
+                    >
+                      <:content>
+                        {{i18n
+                          "admin.dashboard.site_traffic.kpi.logged_in_share.tooltip"
+                        }}
+                      </:content>
+                    </DTooltip>
+                  </div>
                 </div>
-              </div>
+              {{/if}}
+
+              {{#if this.showDirectTraffic}}
+                <div class="db-section__metric">
+                  <div
+                    class="db-section__metric-number"
+                  >{{this.directTraffic}}</div>
+                  <div class="db-section__metric-label">
+                    {{i18n
+                      "admin.dashboard.site_traffic.kpi.direct_traffic.label"
+                    }}
+                    <DTooltip
+                      class="db-section__info"
+                      @identifier="site-traffic-direct-traffic-tooltip"
+                      @icon="far-circle-question"
+                    >
+                      <:content>
+                        {{i18n
+                          "admin.dashboard.site_traffic.kpi.direct_traffic.tooltip"
+                        }}
+                      </:content>
+                    </DTooltip>
+                  </div>
+                </div>
+              {{/if}}
             </div>
           {{/if}}
         </div>
@@ -294,7 +329,21 @@ export default class DashboardTraffic extends Component {
               <div class="db-section__row">
                 <div class="db-section__row-block">
                   <h3 class="db-section__row-block-title">
-                    {{i18n "admin.dashboard.site_traffic.top_referrers.title"}}
+                    <LinkTo
+                      @route="adminReports.show"
+                      @model="top_referrers_by_browser_pageviews"
+                      @query={{hash
+                        start_date=this.reportQuery.start_date
+                        end_date=this.reportQuery.end_date
+                      }}
+                    >
+                      {{i18n
+                        "admin.dashboard.site_traffic.top_referrers.title"
+                      }}
+                      <span class="db-link-arrow" aria-hidden="true">
+                        {{dIcon "arrow-right"}}
+                      </span>
+                    </LinkTo>
                   </h3>
                   {{#if @traffic.top_referrers.error}}
                     <p class="db-traffic__list-error" role="status">
@@ -336,7 +385,21 @@ export default class DashboardTraffic extends Component {
 
                 <div class="db-section__row-block">
                   <h3 class="db-section__row-block-title">
-                    {{i18n "admin.dashboard.site_traffic.top_countries.title"}}
+                    <LinkTo
+                      @route="adminReports.show"
+                      @model="top_countries_by_browser_pageviews"
+                      @query={{hash
+                        start_date=this.reportQuery.start_date
+                        end_date=this.reportQuery.end_date
+                      }}
+                    >
+                      {{i18n
+                        "admin.dashboard.site_traffic.top_countries.title"
+                      }}
+                      <span class="db-link-arrow" aria-hidden="true">
+                        {{dIcon "arrow-right"}}
+                      </span>
+                    </LinkTo>
                   </h3>
                   {{#if @traffic.top_countries.error}}
                     <p class="db-traffic__list-error" role="status">

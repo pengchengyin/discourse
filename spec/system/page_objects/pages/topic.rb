@@ -11,17 +11,17 @@ module PageObjects
       end
 
       def visit_topic(topic, post_number: nil)
-        page.visit(topic.url(post_number))
+        visit(topic.url(post_number))
         self
       end
 
       def open_new_topic
-        page.visit "/new-topic"
+        visit "/new-topic"
         self
       end
 
       def open_new_message
-        page.visit "/new-message"
+        visit "/new-message"
         self
       end
 
@@ -136,13 +136,13 @@ module PageObjects
       end
 
       def has_who_liked_on_post?(post, count: nil)
-        return has_css?(".post-users-popup .post-users-popup__item", count: count) if count
+        return has_css?(".users-popup .users-popup__item", count: count) if count
 
-        has_css?(".post-users-popup")
+        has_css?(".users-popup")
       end
 
       def has_no_who_liked_on_post?(post)
-        has_no_css?(".post-users-popup")
+        has_no_css?(".users-popup")
       end
 
       def has_who_read_on_post?(post, count: nil)
@@ -399,7 +399,7 @@ module PageObjects
       end
 
       def move_to_public_modal
-        find(".modal.convert-to-public-topic")
+        find(".d-modal.convert-to-public-topic")
       end
 
       def has_no_flag_button?

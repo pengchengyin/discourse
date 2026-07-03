@@ -603,6 +603,9 @@ class BulkImport::Generic < BulkImport::Base
         last_seen_at: to_datetime(row["last_seen_at"]),
         admin: row["admin"],
         moderator: row["moderator"],
+        approved: row["approved"].nil? ? nil : row["approved"] == 1,
+        approved_at: to_datetime(row["approved_at"]),
+        approved_by_id: user_id_from_imported_id(row["approved_by_id"]),
         suspended_at: suspended_at,
         suspended_till: suspended_till,
         trust_level: row["trust_level"],
@@ -2467,19 +2470,35 @@ class BulkImport::Generic < BulkImport::Base
     SQL
 
     existing_solved_topics = DiscourseSolved::SolvedTopic.pluck(:topic_id).to_set
+    inserted_topic_ids = []
 
     create_solved_topic(solutions) do |row|
-      post_id = post_id_from_imported_id(row["post_id"])
       topic_id = topic_id_from_imported_id(row["topic_id"])
-      accepter_user_id = user_id_from_imported_id(row["acting_user_id"])
+      next unless topic_id && existing_solved_topics.add?(topic_id)
 
-      next unless post_id && topic_id
-      next unless existing_solved_topics.add?(topic_id)
+      inserted_topic_ids << topic_id
+      { topic_id:, created_at: to_datetime(row["created_at"]) }
+    end
+
+    puts "", "Importing solutions into discourse_solved_topic_answers..."
+
+    solved_topic_id_by_topic_id =
+      DiscourseSolved::SolvedTopic.where(topic_id: inserted_topic_ids).pluck(:topic_id, :id).to_h
+
+    solutions.reset
+
+    create_topic_answers(solutions) do |row|
+      topic_id = topic_id_from_imported_id(row["topic_id"])
+      solved_topic_id = solved_topic_id_by_topic_id[topic_id]
+      next unless solved_topic_id
+
+      post_id = post_id_from_imported_id(row["post_id"])
+      next unless post_id
 
       {
-        topic_id: topic_id,
+        solved_topic_id:,
         answer_post_id: post_id,
-        accepter_user_id: accepter_user_id,
+        accepter_user_id: user_id_from_imported_id(row["acting_user_id"]),
         created_at: to_datetime(row["created_at"]),
       }
     end

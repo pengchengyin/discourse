@@ -133,6 +133,11 @@ export default class TopicFooterButtons extends Component {
     return !this.topic?.isPrivateMessage;
   }
 
+  @computed("showCreate", "topic.details.can_create_post")
+  get showCreateButton() {
+    return this.showCreate !== false && this.topic?.details?.can_create_post;
+  }
+
   <template>
     <div
       role="region"
@@ -242,7 +247,6 @@ export default class TopicFooterButtons extends Component {
                           @disabled={{button.disabled}}
                           id={{concat "topic-footer-button-" button.id}}
                           class={{dConcatClass
-                            "btn-default"
                             "topic-footer-button"
                             button.classNames
                           }}
@@ -275,7 +279,7 @@ export default class TopicFooterButtons extends Component {
           @connectorTagName="span"
         />
 
-        {{#if this.topic.details.can_create_post}}
+        {{#if this.showCreateButton}}
           <DButton
             @icon="reply"
             @action={{this.replyToPost}}

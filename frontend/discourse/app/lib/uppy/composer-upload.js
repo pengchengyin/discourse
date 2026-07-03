@@ -135,6 +135,10 @@ export default class UppyComposerUpload {
   }
 
   setup(element) {
+    if (this.#uploadTargetBound) {
+      this.teardown();
+    }
+
     this.#editorEl = element;
     this.#fileInputEl = document.getElementById(this.fileUploadElementId);
 
@@ -429,6 +433,11 @@ export default class UppyComposerUpload {
 
     this.#uploadTargetBound = true;
     this.#bindMobileUploadButton();
+
+    // Signals that the uploader is bound and ready to accept files via the
+    // `${composerEventPrefix}:add-files` event, e.g. for content shared into
+    // the composer through the Web Share Target.
+    this.appEvents.trigger(`${this.composerEventPrefix}:uploader-ready`);
   }
 
   @bind
@@ -554,9 +563,7 @@ export default class UppyComposerUpload {
 
   @bind
   _pasteEventListener(event) {
-    if (
-      !document.querySelector(this.editorInputClass)?.contains(event.target)
-    ) {
+    if (!event.target.closest(this.editorInputClass)) {
       return;
     }
 

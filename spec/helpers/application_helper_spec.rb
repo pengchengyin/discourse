@@ -2,6 +2,38 @@
 # frozen_string_literal: true
 
 RSpec.describe ApplicationHelper do
+  describe "#discourse_pageview_tracking_meta_tags" do
+    it "includes beacon tracking meta tags for anonymous users when dashboard_improvements is enabled" do
+      SiteSetting.dashboard_improvements = true
+      helper.stubs(:current_user).returns(nil)
+
+      tags = helper.discourse_pageview_tracking_meta_tags
+
+      expect(tags).to include('name="discourse-track-view-session-id"')
+      expect(tags).to include('name="discourse-beacon-pageview-enabled"')
+    end
+
+    it "omits beacon tracking meta tags when dashboard_improvements is disabled" do
+      SiteSetting.dashboard_improvements = false
+
+      tags = helper.discourse_pageview_tracking_meta_tags
+
+      expect(tags).to include('name="discourse-track-view-session-id"')
+      expect(tags).not_to include('name="discourse-beacon-pageview-enabled"')
+    end
+
+    it "includes beacon tracking meta tags for browser pageview event triggers" do
+      SiteSetting.dashboard_improvements = true
+      SiteSetting.persist_browser_pageview_events = false
+      SiteSetting.trigger_browser_pageview_events = true
+
+      tags = helper.discourse_pageview_tracking_meta_tags
+
+      expect(tags).to include('name="discourse-track-view-session-id"')
+      expect(tags).to include('name="discourse-beacon-pageview-enabled"')
+    end
+  end
+
   describe "preload_script" do
     def script_tag(url, entrypoint, nonce)
       <<~HTML
@@ -57,12 +89,17 @@ RSpec.describe ApplicationHelper do
         global_setting :s3_access_key_id, "123"
         global_setting :s3_secret_access_key, "123"
         global_setting :s3_cdn_url, "https://s3cdn.com"
+
+        # Backend RSpec tests might be run without real manifest/assets
+        EmberAssets.stubs(:script_chunks).returns(
+          { "discourse" => ["js/discourse-20n62q6s.digested"] },
+        )
       end
 
       it "deals correctly with subfolder" do
         set_subfolder "/community"
-        expect(helper.preload_script("start-discourse")).to include(
-          %r{https://s3cdn.com/assets/start-discourse-\w{8}.js},
+        expect(helper.preload_script("discourse")).to include(
+          %r{https://s3cdn.com/assets/js/discourse-\w{8}.digested.js},
         )
       end
 
@@ -70,41 +107,41 @@ RSpec.describe ApplicationHelper do
         global_setting :s3_cdn_url, "https://s3cdn.com/s3_subpath"
         set_cdn_url "https://awesome.com"
         set_subfolder "/community"
-        expect(helper.preload_script("start-discourse")).to include(
-          %r{https://s3cdn.com/s3_subpath/assets/start-discourse-\w{8}.js},
+        expect(helper.preload_script("discourse")).to include(
+          %r{https://s3cdn.com/s3_subpath/assets/js/discourse-\w{8}.digested.js},
         )
       end
 
       it "returns magic brotli mangling for brotli requests" do
         helper.request.env["HTTP_ACCEPT_ENCODING"] = "br"
-        link = helper.preload_script("start-discourse")
+        link = helper.preload_script("discourse")
 
-        expect(link).to include(%r{https://s3cdn.com/assets/start-discourse-\w{8}.br.js})
+        expect(link).to include(%r{https://s3cdn.com/assets/br/discourse-\w{8}.digested.js})
       end
 
       it "gives s3 cdn if asset host is not set" do
-        link = helper.preload_script("start-discourse")
+        link = helper.preload_script("discourse")
 
-        expect(link).to include(%r{https://s3cdn.com/assets/start-discourse-\w{8}.js})
+        expect(link).to include(%r{https://s3cdn.com/assets/js/discourse-\w{8}.digested.js})
       end
 
       it "can fall back to gzip compression" do
         helper.request.env["HTTP_ACCEPT_ENCODING"] = "gzip"
-        link = helper.preload_script("start-discourse")
-        expect(link).to include(%r{https://s3cdn.com/assets/start-discourse-\w{8}.gz.js})
+        link = helper.preload_script("discourse")
+        expect(link).to include(%r{https://s3cdn.com/assets/gz/discourse-\w{8}.digested.js})
       end
 
       it "gives s3 cdn even if asset host is set" do
         set_cdn_url "https://awesome.com"
-        link = helper.preload_script("start-discourse")
+        link = helper.preload_script("discourse")
 
-        expect(link).to include(%r{https://s3cdn.com/assets/start-discourse-\w{8}.js})
+        expect(link).to include(%r{https://s3cdn.com/assets/js/discourse-\w{8}.digested.js})
       end
 
       it "uses separate asset CDN if configured" do
         global_setting :s3_asset_cdn_url, "https://s3-asset-cdn.example.com"
-        expect(helper.preload_script("start-discourse")).to include(
-          %r{https://s3-asset-cdn.example.com/assets/start-discourse-\w{8}.js},
+        expect(helper.preload_script("discourse")).to include(
+          %r{https://s3-asset-cdn.example.com/assets/js/discourse-\w{8}.digested.js},
         )
       end
     end
@@ -125,7 +162,7 @@ RSpec.describe ApplicationHelper do
     end
 
     it "does not include extra attrs when none are provided" do
-      result = helper.preload_script("start-discourse")
+      result = helper.preload_script("discourse")
       expect(result).not_to include("data-plugin-name")
       expect(result).not_to include("data-preinstalled")
       expect(result).not_to include("data-official")
@@ -155,14 +192,14 @@ RSpec.describe ApplicationHelper do
 
   describe "add_resource_preload_list" do
     it "adds resources to the preload list" do
-      add_resource_preload_list("/assets/start-discourse.js", "script")
+      add_resource_preload_list("/assets/discourse.js", "script")
       add_resource_preload_list("/assets/discourse.css", "style")
 
       expect(controller.instance_variable_get(:@asset_preload_links).size).to eq(2)
     end
 
     it "adds resources to the preload list when preload_script is called" do
-      helper.preload_script("start-discourse")
+      helper.preload_script("discourse")
 
       expect(controller.instance_variable_get(:@asset_preload_links).size).to eq(1)
     end
@@ -175,7 +212,7 @@ RSpec.describe ApplicationHelper do
 
     it "adds resources as the correct type" do
       helper.discourse_stylesheet_link_tag(:desktop)
-      helper.preload_script("start-discourse")
+      helper.preload_script("discourse")
 
       expect(controller.instance_variable_get(:@asset_preload_links)[0]).to match(/as="style"/)
       expect(controller.instance_variable_get(:@asset_preload_links)[1]).to match(/as="script"/)
@@ -855,13 +892,29 @@ RSpec.describe ApplicationHelper do
 
     context "with custom light scheme" do
       before do
-        @new_cs = Fabricate(:color_scheme, name: "Flamboyant")
+        @new_cs = Fabricate(:color_scheme, name: "Flamboyant", user_selectable: true)
         user.user_option.color_scheme_id = @new_cs.id
         user.user_option.save!
         helper.request.env[Auth::DefaultCurrentUserProvider::CURRENT_USER_KEY] = user
       end
 
       it "returns color scheme from user option value" do
+        color_stylesheets = helper.discourse_color_scheme_stylesheets
+        expect(color_stylesheets).to include("color_definitions_flamboyant")
+      end
+
+      it "falls back to base scheme when the scheme is no longer user selectable" do
+        @new_cs.update!(user_selectable: false)
+
+        color_stylesheets = helper.discourse_color_scheme_stylesheets
+        expect(color_stylesheets).not_to include("color_definitions_flamboyant")
+        expect(color_stylesheets).to include("color_definitions_light-default")
+      end
+
+      it "keeps a non-user-selectable scheme that is the theme's own color scheme" do
+        @new_cs.update!(user_selectable: false)
+        Theme.find_default.update!(color_scheme_id: @new_cs.id)
+
         color_stylesheets = helper.discourse_color_scheme_stylesheets
         expect(color_stylesheets).to include("color_definitions_flamboyant")
       end
@@ -890,7 +943,7 @@ RSpec.describe ApplicationHelper do
         user.user_option.interface_color_mode = UserOption::LIGHT_MODE
         user.user_option.save!
         helper.request.env[Auth::DefaultCurrentUserProvider::CURRENT_USER_KEY] = user
-        @new_cs = Fabricate(:color_scheme, name: "Custom Color Scheme")
+        @new_cs = Fabricate(:color_scheme, name: "Custom Color Scheme", user_selectable: true)
 
         Theme.find_default.update!(dark_color_scheme_id: ColorScheme.where(name: "Dark").pick(:id))
       end
@@ -971,12 +1024,12 @@ RSpec.describe ApplicationHelper do
 
   describe "#discourse_theme_color_meta_tags" do
     before do
-      light = Fabricate(:color_scheme)
+      light = Fabricate(:color_scheme, user_selectable: true)
       light.color_scheme_colors << ColorSchemeColor.new(name: "header_background", hex: "abcdef")
       light.save!
       helper.request.cookies["color_scheme_id"] = light.id
 
-      dark = Fabricate(:color_scheme)
+      dark = Fabricate(:color_scheme, user_selectable: true)
       dark.color_scheme_colors << ColorSchemeColor.new(name: "header_background", hex: "defabc")
       dark.save!
       helper.request.cookies["dark_scheme_id"] = dark.id
@@ -1030,7 +1083,7 @@ RSpec.describe ApplicationHelper do
     end
 
     it "renders a 'light dark' color-scheme if a dark scheme is set" do
-      dark = Fabricate(:color_scheme)
+      dark = Fabricate(:color_scheme, user_selectable: true)
       dark.save!
       helper.request.cookies["dark_scheme_id"] = dark.id
 
@@ -1041,8 +1094,8 @@ RSpec.describe ApplicationHelper do
   end
 
   describe "#dark_scheme_id" do
-    fab!(:dark_scheme, :color_scheme)
-    fab!(:light_scheme, :color_scheme)
+    fab!(:dark_scheme) { Fabricate(:color_scheme, user_selectable: true) }
+    fab!(:light_scheme) { Fabricate(:color_scheme, user_selectable: true) }
 
     before do
       helper.request.cookies["color_scheme_id"] = light_scheme.id

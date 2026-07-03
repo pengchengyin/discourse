@@ -130,39 +130,30 @@ module ApplicationHelper
       end
 
       if is_brotli_req?
-        if path.include?("/assets/js/")
-          path = path.sub("/assets/js/", "/assets/br/")
-        else
-          path = path.sub(/\.([^.]+)\z/, '.br.\1')
-        end
+        path = path.sub("/assets/js/", "/assets/br/")
       elsif is_gzip_req?
-        if path.include?("/assets/js/")
-          path = path.sub("/assets/js/", "/assets/gz/")
-        else
-          path = path.sub(/\.([^.]+)\z/, '.gz.\1')
-        end
+        path = path.sub("/assets/js/", "/assets/gz/")
       end
     end
 
     path
   end
 
-  def preload_script(script, attrs: {})
-    scripts = []
+  def preload_script(script, type_module: false, attrs: {})
+    resolved_script = EmberAssets.script_chunks[script]&.first || script
+    path = script_asset_path(resolved_script)
+    preload_script_url(path, entrypoint: script, type_module:, attrs:).html_safe
+  end
 
-    if chunks = EmberCli.script_chunks[script]
-      scripts.push(*chunks)
-    else
-      scripts.push(script)
-    end
+  def module_preloads_for(*scripts)
+    resolved_preload_scripts =
+      scripts.compact.flat_map { |script| EmberAssets.script_chunks[script] }.compact.uniq
 
-    scripts
-      .map do |name|
-        path = script_asset_path(name)
-        preload_script_url(path, entrypoint: script, attrs: attrs)
-      end
-      .join("\n")
-      .html_safe
+    modulepreload_tags = resolved_preload_scripts.map { |script| <<~HTML }
+      <link rel="modulepreload" href="#{script_asset_path script}" nonce="#{csp_nonce_placeholder}">
+    HTML
+
+    modulepreload_tags.join("\n").html_safe
   end
 
   def preload_script_url(url, entrypoint: nil, type_module: false, attrs: nil)
@@ -431,9 +422,7 @@ module ApplicationHelper
   end
 
   def discourse_pageview_tracking_meta_tags
-    if !SiteSetting.trigger_browser_pageview_events &&
-         !SiteSetting.use_beacon_for_browser_page_views &&
-         !SiteSetting.persist_browser_pageview_events
+    if !SiteSetting.trigger_browser_pageview_events && !SiteSetting.persist_browser_pageview_events
       return ""
     end
 
@@ -442,7 +431,7 @@ module ApplicationHelper
       name: "discourse-track-view-session-id",
       content: track_view_session_id_placeholder,
     )
-    if SiteSetting.use_beacon_for_browser_page_views
+    if UpcomingChanges.enabled?(:dashboard_improvements)
       tags << tag.meta(name: "discourse-beacon-pageview-enabled", content: "true")
     end
     tags.html_safe
@@ -676,7 +665,11 @@ module ApplicationHelper
   def user_scheme_id
     return @user_scheme_id if defined?(@user_scheme_id)
     scheme_id = cookies[:color_scheme_id] || current_user&.user_option&.color_scheme_id
-    @user_scheme_id = scheme_id if scheme_id && ColorScheme.find_by_id(scheme_id)
+    @user_scheme_id = scheme_id if scheme_id &&
+      (
+        ColorScheme.exists?(id: scheme_id, user_selectable: true) ||
+          theme&.color_scheme_id == scheme_id.to_i
+      )
   end
 
   def scheme_id
@@ -692,10 +685,18 @@ module ApplicationHelper
     @scheme_id = Theme.where(id: theme_id).pick(:color_scheme_id)
   end
 
+  def theme
+    @theme = theme_id ? Theme.find_by_id(theme_id) : Theme.find_default
+  end
+
   def user_dark_scheme_id
     return @user_dark_scheme_id if defined?(@user_dark_scheme_id)
     scheme_id = cookies[:dark_scheme_id] || current_user&.user_option&.dark_scheme_id
-    @user_dark_scheme_id = scheme_id if scheme_id && ColorScheme.find_by_id(scheme_id)
+    @user_dark_scheme_id = scheme_id if scheme_id &&
+      (
+        ColorScheme.exists?(id: scheme_id, user_selectable: true) ||
+          theme&.dark_color_scheme_id == scheme_id.to_i
+      )
   end
 
   def dark_scheme_id
@@ -993,14 +994,11 @@ module ApplicationHelper
       disable_custom_css: loading_admin?,
       highlight_js_path: HighlightJs.path,
       svg_sprite_path: SvgSprite.path(theme_id),
-      media_optimization_bundle:
-        script_asset_path(
-          EmberCli.script_chunks["media-optimization-bundle"]&.first || "media-optimization-bundle",
-        ),
       enable_js_error_reporting: GlobalSetting.enable_js_error_reporting,
       color_scheme_is_dark: dark_color_scheme?,
       user_color_scheme_id: user_scheme_id || -1,
       user_dark_scheme_id: user_dark_scheme_id || -1,
+      is_staff: staff?,
     }
 
     if Rails.env.development?

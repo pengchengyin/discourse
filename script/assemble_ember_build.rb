@@ -136,7 +136,7 @@ ensure
   FileUtils.rm_rf(DOWNLOAD_EXTRACT_DIR) if File.exist?(DOWNLOAD_EXTRACT_DIR)
 end
 
-build_cmd = %w[pnpm ember build]
+build_cmd = %w[pnpm build]
 build_env = { "CI" => "1", "SKIP_DB_AND_REDIS" => "1" }
 
 if Etc.nprocessors > 2
@@ -150,8 +150,6 @@ if low_memory_environment?
   build_env["CHEAP_SOURCE_MAPS"] = "1"
   build_env["JOBS"] = "1"
 end
-
-build_cmd << "-prod" if resolved_ember_env == "production"
 
 core_build_reusable =
   existing_core_build_usable? || (download_prebuild_assets! && existing_core_build_usable?)
@@ -168,7 +166,10 @@ build_plugin_env = { "SKIP_DB_AND_REDIS" => "1" }
 system(build_plugin_env, "bin/rake", "assets:precompile:build_plugins", exception: true)
 
 if ARGV.include?("--compress")
-  files = [*Dir.glob("#{EMBER_APP_DIR}/dist/**/*.js"), *Dir.glob("app/assets/generated/**/*.js")]
+  files = [
+    *Dir.glob("#{EMBER_APP_DIR}/dist/**/*.{js,wasm}"),
+    *Dir.glob("app/assets/generated/**/*.{js,wasm}"),
+  ]
   Parallel.map(files, in_threads: 4) do |file|
     next if File.exist?("#{file}.gz") && File.exist?("#{file}.br")
 

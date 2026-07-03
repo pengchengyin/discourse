@@ -78,13 +78,7 @@ class ApplicationController < ActionController::Base
   helper_method :show_browser_update?
 
   def use_crawler_layout?
-    @use_crawler_layout ||=
-      request.user_agent && (request.media_type.blank? || request.media_type.include?("html")) &&
-        !%w[json rss].include?(params[:format]) &&
-        (
-          has_escaped_fragment? || params.key?("print") || show_browser_update? ||
-            CrawlerDetection.crawler?(request.user_agent, request.headers["HTTP_VIA"])
-        )
+    @use_crawler_layout ||= CrawlerDetection.crawler_layout_request?(request)
   end
   helper_method :use_crawler_layout?
 
@@ -119,24 +113,15 @@ class ApplicationController < ActionController::Base
     response.headers.delete("X-Frame-Options") if SiteSetting.allow_embedding_site_in_an_iframe
   end
 
-  def ember_cli_required?
-    Rails.env.development? && ENV["ALLOW_EMBER_CLI_PROXY_BYPASS"] != "1" &&
-      request.headers["X-Discourse-Ember-CLI"] != "true"
-  end
-
-  def application_layout
-    ember_cli_required? ? "ember_cli" : "application"
-  end
-
   def set_layout
     case request.headers["Discourse-Render"]
     when "desktop"
-      return application_layout
+      return "application"
     when "crawler"
       return "crawler"
     end
 
-    use_crawler_layout? ? "crawler" : application_layout
+    use_crawler_layout? ? "crawler" : "application"
   end
 
   class RenderEmpty < StandardError
@@ -147,6 +132,12 @@ class ApplicationController < ActionController::Base
 
   rescue_from RenderEmpty do
     with_resolved_locale { render "default/empty" }
+  end
+
+  rescue_from EmberAssets::BuildError do |e|
+    @build_error = e.details
+    response.headers["Cache-Control"] = "no-store"
+    render "default/build_error", layout: false, status: :service_unavailable
   end
 
   rescue_from ArgumentError do |e|
