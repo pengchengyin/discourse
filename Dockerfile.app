@@ -7,7 +7,7 @@ ENV NODE_ENV=production
 ENV DISCOURSE_HOSTNAME=localhost
 ENV CI=true
 
-# production 环境不需要 development/test 依赖
+# production 环境不安装 development/test 依赖
 ENV BUNDLE_WITHOUT="development:test"
 ENV BUNDLE_DEPLOYMENT=false
 
@@ -26,17 +26,19 @@ COPY . ${APP_ROOT}
 
 RUN git config --global --add safe.directory ${APP_ROOT} || true
 
-# 如果插件 discourse-workflows 依赖 liquid，建议源码 Gemfile 中正式加入：
-# gem "liquid"
-# 这里保留兜底，避免缺失 liquid 导致启动失败
+# 安装 Ruby 依赖
+# liquid 是 discourse-workflows 插件需要的依赖，建议后续正式写进 Gemfile 或插件依赖中
 RUN rm -rf .bundle \
     && bundle config unset without || true \
     && bundle config unset deployment || true \
     && bundle config set path vendor/bundle \
-    && grep -q 'gem "liquid"' Gemfile || echo 'gem "liquid"' >> Gemfile \
+    && (grep -q 'gem "liquid"' Gemfile || echo 'gem "liquid"' >> Gemfile) \
     && bundle install --jobs 4 --retry 3
 
-RUN rm -rf node_modules app/assets/javascripts/*/node_modules \
+# 清理所有可能从宿主机复制进来的前端依赖和构建缓存，然后重新安装
+RUN find . -name node_modules -type d -prune -exec rm -rf '{}' + \
+    && find . -name .embroider -type d -prune -exec rm -rf '{}' + \
+    && rm -rf public/assets app/assets/builds tmp/cache \
     && corepack enable || true; \
     if [ -f pnpm-lock.yaml ]; then \
       CI=true pnpm install --frozen-lockfile; \

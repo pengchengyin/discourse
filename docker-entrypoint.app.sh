@@ -143,24 +143,31 @@ bundle exec rails runner "
       existing = UserEmail.find_by(user_id: user.id, email: admin_email)
 
       if existing
-        existing.update_columns(primary: true, confirmed: true)
+        existing.update_columns(primary: true)
       else
         UserEmail.create!(
           user_id: user.id,
           email: admin_email,
-          primary: true,
-          confirmed: true
+          primary: true
         )
       end
-
-      UserEmail.where(user_id: user.id).update_all(confirmed: true)
     end
   rescue => e
     puts \"Skip updating admin UserEmail: #{e.class}: #{e.message}\"
   end
 
   begin
-    EmailToken.where(user_id: user.id).update_all(confirmed: true) if defined?(EmailToken)
+    if defined?(EmailToken)
+      EmailToken.where(user_id: user.id, email: admin_email).update_all(
+        confirmed: true,
+        expired: false
+      )
+
+      EmailToken.where(user_id: user.id).update_all(
+        confirmed: true,
+        expired: false
+      )
+    end
   rescue => e
     puts \"Skip updating admin EmailToken: #{e.class}: #{e.message}\"
   end
@@ -191,8 +198,12 @@ bundle exec rails runner "
         approved_by_id: -1
       )
 
-      UserEmail.where(user_id: u.id).update_all(confirmed: true) if defined?(UserEmail)
-      EmailToken.where(user_id: u.id).update_all(confirmed: true) if defined?(EmailToken)
+      if defined?(EmailToken)
+        EmailToken.where(user_id: u.id).update_all(
+          confirmed: true,
+          expired: false
+        )
+      end
 
       puts \"Activated user: #{u.id} / #{u.email}\"
     rescue => e
@@ -202,6 +213,11 @@ bundle exec rails runner "
 
   puts \"Admin ready: #{admin_email} / #{admin_password}\"
 "
+
+echo "Cleaning frontend build cache..."
+rm -rf frontend/discourse/node_modules/.embroider
+rm -rf tmp/cache
+
 if [ ! -f public/assets/manifest.json ] && [ -z "$(ls public/assets/.sprockets-manifest-* 2>/dev/null)" ]; then
   echo "Assets manifest not found, precompiling assets..."
   bundle exec rake assets:precompile
