@@ -6,7 +6,7 @@ cd /var/www/discourse
 echo "Generating config/discourse.conf..."
 
 cat > config/discourse.conf <<'EOF'
-hostname = localhost
+hostname = discourse.rs.com
 developer_emails = admin@example.com
 
 db_host = postgres
@@ -225,6 +225,6 @@ else
   echo "Assets already precompiled, skip assets:precompile"
 fi
 
-echo "Starting Discourse Rails server..."
+echo "Starting Discourse Rack server..."
 
-exec bundle exec rails server -b 0.0.0.0 -p 3000
+exec bundle exec rackup -o 0.0.0.0 -p 3000 config.ru
