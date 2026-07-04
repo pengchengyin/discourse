@@ -6,6 +6,7 @@ class IntegrationAuthController < ApplicationController
   skip_before_action :preload_json
   skip_before_action :verify_authenticity_token
 
+  before_action :ensure_discourse_api_key!
   # 根据用户名进行登录，用户不存在则自动创建
   # POST /integration-auth/login
   # 参数: { username: "xxx" }
@@ -66,5 +67,35 @@ class IntegrationAuthController < ApplicationController
 
   def render_invalid(error)
     render json: { success: false, error: error }, status: :unprocessable_entity
+  end
+
+  def ensure_discourse_api_key!
+    api_key = request.headers["Api-Key"].presence
+    api_username = request.headers["Api-Username"].presence
+
+    if api_key.blank? || api_username.blank?
+      render json: {
+        success: false,
+        error: "missing api key"
+      }, status: 401
+      return
+    end
+
+    # Discourse 原生 API Key 认证成功后，current_user 应该是 Api-Username 对应的用户
+    if current_user.blank?
+      render json: {
+        success: false,
+        error: "invalid api key"
+      }, status: 401
+      return
+    end
+
+    unless current_user.admin?
+      render json: {
+        success: false,
+        error: "admin api key required"
+      }, status: 403
+      return
+    end
   end
 end
