@@ -5,7 +5,7 @@ cd /var/www/discourse
 
 echo "Generating config/discourse.conf..."
 
-cat > config/discourse.conf <<'EOF'
+cat > config/discourse.conf <<EOF
 hostname = ${DISCOURSE_HOSTNAME:-discourse.rs.com}
 developer_emails = ${DISCOURSE_DEVELOPER_EMAILS:-admin@example.com}
 
@@ -34,7 +34,7 @@ EOF
 
 echo "Generating config/database.yml..."
 
-cat > config/database.yml <<'EOF'
+cat > config/database.yml <<EOF
 production:
   prepared_statements: false
   adapter: postgresql
