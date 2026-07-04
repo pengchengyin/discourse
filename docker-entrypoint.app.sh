@@ -6,8 +6,8 @@ cd /var/www/discourse
 echo "Generating config/discourse.conf..."
 
 cat > config/discourse.conf <<'EOF'
-hostname = discourse.rs.com
-developer_emails = admin@example.com
+hostname = ${DISCOURSE_HOSTNAME:-discourse.rs.com}
+developer_emails = ${DISCOURSE_DEVELOPER_EMAILS:-admin@example.com}
 
 db_host = postgres
 db_port = 5432
@@ -47,7 +47,7 @@ production:
   pool: 8
   checkout_timeout: 5
   host_names:
-    - localhost
+    - ${DISCOURSE_HOSTNAME:-discourse.rs.com}
 
 development:
   prepared_statements: false
@@ -61,7 +61,7 @@ development:
   pool: 5
   checkout_timeout: 5
   host_names:
-    - localhost
+    - ${DISCOURSE_HOSTNAME:-discourse.rs.com}
 
 test:
   prepared_statements: false
@@ -76,7 +76,7 @@ test:
   reaping_frequency: 0
   checkout_timeout: 5
   host_names:
-    - test.localhost
+    - ${DISCOURSE_HOSTNAME:-discourse.rs.com}
 EOF
 
 git config --global --add safe.directory /var/www/discourse || true

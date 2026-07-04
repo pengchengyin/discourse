@@ -37,9 +37,9 @@ services:
       RACK_ENV: production
       NODE_ENV: production
 
-      DISCOURSE_HOSTNAME: discourse.rs.com
-      DISCOURSE_DEVELOPER_EMAILS: admin@example.com
-      DISCOURSE_ADMIN_PASSWORD: Admin@1234567890
+      DISCOURSE_HOSTNAME: ${DISCOURSE_HOSTNAME}
+      DISCOURSE_DEVELOPER_EMAILS: ${DISCOURSE_DEVELOPER_EMAILS}
+      DISCOURSE_ADMIN_PASSWORD: ${DISCOURSE_ADMIN_PASSWORD}
 
       DISCOURSE_DB_HOST: postgres
       DISCOURSE_DB_PORT: 5432
@@ -52,15 +52,15 @@ services:
       DISCOURSE_REDIS_URL: redis://redis:6379
       REDIS_URL: redis://redis:6379
 
+      # 单容器测试环境可以先关掉邮件
+      DISCOURSE_DISABLE_EMAILS: "yes"
       DISCOURSE_SMTP_ADDRESS: ""
       DISCOURSE_SMTP_PORT: 587
       DISCOURSE_SMTP_USER_NAME: ""
       DISCOURSE_SMTP_PASSWORD: ""
 
-      # 单容器测试环境可以先关掉邮件
-      DISCOURSE_DISABLE_EMAILS: "yes"
     ports:
-      - "80:80"
+      - "${DISCOURSE_EXTERNAL_PORT}:80"
     volumes:
       - ./data/uploads:/var/www/discourse/public/uploads
     networks:
