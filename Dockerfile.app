@@ -29,7 +29,7 @@ RUN git config --global --add safe.directory ${APP_ROOT} || true
 RUN rm -f /etc/nginx/sites-enabled/default \
     && rm -f /etc/nginx/conf.d/default.conf || true
 
-COPY docker/nginx/discourse.conf /etc/nginx/conf.d/discourse.conf
+COPY nginx-discourse.conf /etc/nginx/conf.d/discourse.conf
 
 RUN find bin script -type f -exec sed -i 's/\r$//' {} \; \
     && find bin script -type f -exec chmod +x {} \;
