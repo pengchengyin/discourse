@@ -59,7 +59,7 @@ services:
       # 单容器测试环境可以先关掉邮件
       DISCOURSE_DISABLE_EMAILS: "yes"
     ports:
-      - "3000:3000"
+      - "13000:80"
     volumes:
       - discourse_uploads:/var/www/discourse/public/uploads
     networks:

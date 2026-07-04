@@ -4,10 +4,9 @@ ENV APP_ROOT=/var/www/discourse
 ENV RAILS_ENV=production
 ENV RACK_ENV=production
 ENV NODE_ENV=production
-ENV DISCOURSE_HOSTNAME=localhost
+ENV DISCOURSE_HOSTNAME=discourse.rs.com
 ENV CI=true
 
-# production 环境不安装 development/test 依赖
 ENV BUNDLE_WITHOUT="development:test"
 ENV BUNDLE_DEPLOYMENT=false
 
@@ -15,6 +14,7 @@ USER root
 
 RUN apt-get update && apt-get install -y \
     git \
+    nginx \
     netcat-openbsd \
     postgresql-client \
     ca-certificates \
@@ -26,16 +26,21 @@ COPY . ${APP_ROOT}
 
 RUN git config --global --add safe.directory ${APP_ROOT} || true
 
-# 安装 Ruby 依赖
-# liquid 是 discourse-workflows 插件需要的依赖，建议后续正式写进 Gemfile 或插件依赖中
+RUN rm -f /etc/nginx/sites-enabled/default \
+    && rm -f /etc/nginx/conf.d/default.conf || true
+
+COPY docker/nginx/discourse.conf /etc/nginx/conf.d/discourse.conf
+
+RUN find bin script -type f -exec sed -i 's/\r$//' {} \; \
+    && find bin script -type f -exec chmod +x {} \;
+
 RUN rm -rf .bundle \
     && bundle config unset without || true \
     && bundle config unset deployment || true \
     && bundle config set path vendor/bundle \
-    && (grep -q 'gem "liquid"' Gemfile || echo 'gem "liquid"' >> Gemfile) \
+    && if ! grep -q 'gem "liquid"' Gemfile; then echo 'gem "liquid"' >> Gemfile; fi \
     && bundle install --jobs 4 --retry 3
 
-# 清理所有可能从宿主机复制进来的前端依赖和构建缓存，然后重新安装
 RUN find . -name node_modules -type d -prune -exec rm -rf '{}' + \
     && find . -name .embroider -type d -prune -exec rm -rf '{}' + \
     && rm -rf public/assets app/assets/builds tmp/cache \
@@ -48,7 +53,7 @@ RUN find . -name node_modules -type d -prune -exec rm -rf '{}' + \
       CI=true yarn install; \
     fi
 
-EXPOSE 3000
+EXPOSE 80
 
 COPY docker-entrypoint.app.sh /usr/local/bin/docker-entrypoint.app.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.app.sh

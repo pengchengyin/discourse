@@ -225,6 +225,20 @@ else
   echo "Assets already precompiled, skip assets:precompile"
 fi
 
-echo "Starting Discourse Rack server..."
+echo "Testing nginx config..."
+nginx -t
 
-exec bundle exec rackup -o 0.0.0.0 -p 3000 config.ru
+echo "Starting Discourse Rack app on 127.0.0.1:9292..."
+bundle exec rackup -o 127.0.0.1 -p 9292 config.ru &
+APP_PID=$!
+
+sleep 3
+
+if ! kill -0 "$APP_PID" 2>/dev/null; then
+  echo "Discourse Rack app failed to start"
+  exit 1
+fi
+
+echo "Starting nginx on 0.0.0.0:3000..."
+
+exec nginx -g "daemon off;"
