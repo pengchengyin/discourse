@@ -73,3 +73,44 @@ volumes:
 networks:
   discourse_internal:
     driver: bridge
+
+
+##管理员密码重置方式
+##开始
+# docker-compose exec web bash -lc 'cd /var/www/discourse && bundle exec rails runner - <<'"'"'RUBY'"'"'
+# admin_email = "admin@example.com"
+# admin_password = "Admin@1234567890"
+
+# user = User.find_by_email(admin_email)
+# raise "admin user not found: #{admin_email}" if user.nil?
+
+# user.active = true
+# user.approved = true
+# user.admin = true
+# user.moderator = true
+# user.password = admin_password
+# user.save!(validate: false)
+
+# user.update_columns(
+#   active: true,
+#   approved: true,
+#   approved_at: Time.now,
+#   approved_by_id: -1,
+#   admin: true,
+#   moderator: true
+# )
+
+# if defined?(EmailToken)
+#   EmailToken.where(user_id: user.id).update_all(
+#     confirmed: true,
+#     expired: false
+#   )
+# end
+
+# if defined?(UserEmail)
+#   UserEmail.where(user_id: user.id, email: admin_email).update_all(primary: true)
+# end
+
+# puts "admin password reset ok: #{user.email}"
+# RUBY'
+##结束
