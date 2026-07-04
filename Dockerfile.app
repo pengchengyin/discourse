@@ -20,6 +20,10 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+RUN mkdir -p /var/log/nginx /var/lib/nginx /run/nginx \
+    && ln -sf /dev/stdout /var/log/nginx/access.log \
+    && ln -sf /dev/stderr /var/log/nginx/error.log
+    
 WORKDIR ${APP_ROOT}
 
 COPY . ${APP_ROOT}
