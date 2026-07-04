@@ -228,17 +228,22 @@ fi
 echo "Testing nginx config..."
 nginx -t
 
-echo "Starting Discourse Rack app on 127.0.0.1:9292..."
-bundle exec rackup -o 127.0.0.1 -p 9292 config.ru &
+echo "Starting Discourse Pitchfork app on 127.0.0.1:9292..."
+
+export UNICORN_PORT=9292
+export UNICORN_WORKERS="${UNICORN_WORKERS:-2}"
+export UNICORN_SIDEKIQS="${UNICORN_SIDEKIQS:-1}"
+
+bundle exec pitchfork -c config/pitchfork.conf.rb &
 APP_PID=$!
 
-sleep 3
+sleep 5
 
 if ! kill -0 "$APP_PID" 2>/dev/null; then
-  echo "Discourse Rack app failed to start"
+  echo "Discourse Pitchfork app failed to start"
   exit 1
 fi
 
-echo "Starting nginx on 0.0.0.0:3000..."
+echo "Starting nginx on 0.0.0.0:80..."
 
 exec nginx -g "daemon off;"
