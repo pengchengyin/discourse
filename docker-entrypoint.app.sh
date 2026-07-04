@@ -47,7 +47,7 @@ production:
   pool: 8
   checkout_timeout: 5
   host_names:
-    - ${DISCOURSE_HOSTNAME:-discourse.rs.com}
+    - ${DISCOURSE_DOMAIN:-discourse.rs.com}
 
 development:
   prepared_statements: false
@@ -61,7 +61,7 @@ development:
   pool: 5
   checkout_timeout: 5
   host_names:
-    - ${DISCOURSE_HOSTNAME:-discourse.rs.com}
+    - ${DISCOURSE_DOMAIN:-discourse.rs.com}
 
 test:
   prepared_statements: false
@@ -76,7 +76,7 @@ test:
   reaping_frequency: 0
   checkout_timeout: 5
   host_names:
-    - ${DISCOURSE_HOSTNAME:-discourse.rs.com}
+    - ${DISCOURSE_DOMAIN:-discourse.rs.com}
 EOF
 
 git config --global --add safe.directory /var/www/discourse || true
