@@ -98,97 +98,128 @@ bundle exec rake db:migrate
 
 echo "Applying site settings and activating admin user..."
 
-bundle exec rails runner "
-  admin_email = ENV.fetch('DISCOURSE_DEVELOPER_EMAILS', 'admin@example.com').split(',').first.strip
-  admin_password = ENV.fetch('DISCOURSE_ADMIN_PASSWORD', 'Admin@1234567890')
+bundle exec rails runner <<'RUBY'
+admin_email = ENV.fetch("DISCOURSE_DEVELOPER_EMAILS", "admin@example.com").split(",").first.strip
+admin_password = ENV.fetch("DISCOURSE_ADMIN_PASSWORD", "Admin@1234567890")
+reset_admin_password = ENV.fetch("RESET_ADMIN_PASSWORD", "false").to_s.downcase == "true"
 
+puts "Admin email: #{admin_email}"
+puts "Reset admin password: #{reset_admin_password}"
+
+begin
   SiteSetting.must_approve_users = false if SiteSetting.respond_to?(:must_approve_users=)
-  SiteSetting.disable_emails = 'yes' if SiteSetting.respond_to?(:disable_emails=)
+  SiteSetting.disable_emails = "yes" if SiteSetting.respond_to?(:disable_emails=)
   SiteSetting.enable_local_logins = true if SiteSetting.respond_to?(:enable_local_logins=)
   SiteSetting.login_required = false if SiteSetting.respond_to?(:login_required=)
 
-  user = User.find_by_email(admin_email)
-
-  if user.nil?
-    username = admin_email.split('@').first.gsub(/[^a-zA-Z0-9_]/, '_')
-
-    puts \"Admin user not found, creating: #{admin_email}\"
-
-    user = User.new(
-      username: username,
-      name: 'Admin',
-      email: admin_email,
-      active: true,
-      approved: true,
-      admin: true,
-      moderator: true
-    )
-
-    user.save!(validate: false)
-  else
-    puts \"Admin user found: #{admin_email}\"
+  if ENV["DISCOURSE_HOSTNAME"].present? && SiteSetting.respond_to?(:force_hostname=)
+    SiteSetting.force_hostname = ENV["DISCOURSE_HOSTNAME"]
+    puts "force_hostname set: #{SiteSetting.force_hostname}"
   end
+rescue => e
+  puts "Skip site settings update: #{e.class}: #{e.message}"
+end
 
-  user.update_columns(
+user = User.find_by_email(admin_email)
+created_admin = false
+
+if user.nil?
+  username = admin_email.split("@").first.gsub(/[^a-zA-Z0-9_]/, "_")
+
+  puts "Admin user not found, creating: #{admin_email}"
+
+  user = User.new(
+    username: username,
+    name: "Admin",
+    email: admin_email,
     active: true,
     approved: true,
-    approved_at: Time.now,
-    approved_by_id: -1,
     admin: true,
     moderator: true
   )
 
-  begin
-    if defined?(UserEmail)
-      existing = UserEmail.find_by(user_id: user.id, email: admin_email)
+  user.password = admin_password
+  user.save!(validate: false)
+  created_admin = true
+else
+  puts "Admin user found: #{admin_email}"
+end
 
-      if existing
-        existing.update_columns(primary: true)
-      else
-        UserEmail.create!(
-          user_id: user.id,
-          email: admin_email,
-          primary: true
-        )
-      end
-    end
-  rescue => e
-    puts \"Skip updating admin UserEmail: #{e.class}: #{e.message}\"
-  end
+user.update_columns(
+  active: true,
+  approved: true,
+  approved_at: Time.now,
+  approved_by_id: -1,
+  admin: true,
+  moderator: true
+)
 
-  begin
-    if defined?(EmailToken)
-      EmailToken.where(user_id: user.id, email: admin_email).update_all(
-        confirmed: true,
-        expired: false
-      )
+begin
+  if defined?(UserEmail)
+    existing = UserEmail.find_by(user_id: user.id, email: admin_email)
 
-      EmailToken.where(user_id: user.id).update_all(
-        confirmed: true,
-        expired: false
-      )
-    end
-  rescue => e
-    puts \"Skip updating admin EmailToken: #{e.class}: #{e.message}\"
-  end
-
-  begin
-    user.activate if user.respond_to?(:activate)
-  rescue => e
-    puts \"Skip user.activate: #{e.class}: #{e.message}\"
-  end
-
-  begin
-    if defined?(PasswordResetter)
-      PasswordResetter.new(user).reset_password(admin_password)
-      puts \"Admin password reset by PasswordResetter\"
+    if existing
+      existing.update_columns(primary: true)
     else
-      puts \"PasswordResetter not defined, skip password reset\"
+      UserEmail.create!(
+        user_id: user.id,
+        email: admin_email,
+        primary: true
+      )
     end
-  rescue => e
-    puts \"Skip password reset: #{e.class}: #{e.message}\"
+  end
+rescue => e
+  puts "Skip updating admin UserEmail: #{e.class}: #{e.message}"
+end
+
+begin
+  if defined?(EmailToken)
+    EmailToken.where(user_id: user.id).update_all(
+      confirmed: true,
+      expired: false
+    )
+  end
+rescue => e
+  puts "Skip updating admin EmailToken: #{e.class}: #{e.message}"
+end
+
+begin
+  user.activate if user.respond_to?(:activate)
+rescue => e
+  puts "Skip user.activate: #{e.class}: #{e.message}"
+end
+
+admin_has_password =
+  begin
+    user.reload
+    user.user_password.present?
+  rescue
+    false
   end
 
+if created_admin || reset_admin_password || !admin_has_password
+  begin
+    user.password = admin_password
+    user.save!(validate: false)
+
+    reason =
+      if created_admin
+        "created admin"
+      elsif reset_admin_password
+        "RESET_ADMIN_PASSWORD=true"
+      else
+        "admin had no password"
+      end
+
+    puts "Admin password set because: #{reason}"
+  rescue => e
+    puts "Skip direct password set: #{e.class}: #{e.message}"
+  end
+else
+  puts "Admin password unchanged. Set RESET_ADMIN_PASSWORD=true to force reset."
+end
+
+begin
   User.where(active: false).find_each do |u|
     begin
       u.update_columns(
@@ -205,14 +236,24 @@ bundle exec rails runner "
         )
       end
 
-      puts \"Activated user: #{u.id} / #{u.email}\"
+      puts "Activated user: #{u.id} / #{u.email}"
     rescue => e
-      puts \"Skip user #{u.id}: #{e.class}: #{e.message}\"
+      puts "Skip user #{u.id}: #{e.class}: #{e.message}"
     end
   end
+rescue => e
+  puts "Skip activating inactive users: #{e.class}: #{e.message}"
+end
 
-  puts \"Admin ready: #{admin_email} / #{admin_password}\"
-"
+begin
+  Discourse.cache.clear
+  SiteSetting.clear_cache! if SiteSetting.respond_to?(:clear_cache!)
+rescue => e
+  puts "Skip cache clear: #{e.class}: #{e.message}"
+end
+
+puts "Admin ready: #{admin_email}"
+RUBY
 
 echo "Cleaning frontend build cache..."
 rm -rf frontend/discourse/node_modules/.embroider
@@ -237,10 +278,23 @@ export UNICORN_SIDEKIQS="${UNICORN_SIDEKIQS:-1}"
 bundle exec pitchfork -c config/pitchfork.conf.rb &
 APP_PID=$!
 
-sleep 5
+echo "Waiting for Discourse app port 9292..."
+for i in $(seq 1 60); do
+  if nc -z 127.0.0.1 9292; then
+    echo "Discourse app is listening on 127.0.0.1:9292"
+    break
+  fi
 
-if ! kill -0 "$APP_PID" 2>/dev/null; then
-  echo "Discourse Pitchfork app failed to start"
+  if ! kill -0 "$APP_PID" 2>/dev/null; then
+    echo "Discourse Pitchfork app process exited before port 9292 became ready"
+    exit 1
+  fi
+
+  sleep 1
+done
+
+if ! nc -z 127.0.0.1 9292; then
+  echo "Timed out waiting for Discourse app on 127.0.0.1:9292"
   exit 1
 fi
 
