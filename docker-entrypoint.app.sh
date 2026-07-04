@@ -98,7 +98,7 @@ bundle exec rake db:migrate
 
 echo "Applying site settings and activating admin user..."
 
-bundle exec rails runner <<'RUBY'
+bundle exec rails runner - <<'RUBY'
 admin_email = ENV.fetch("DISCOURSE_DEVELOPER_EMAILS", "admin@example.com").split(",").first.strip
 admin_password = ENV.fetch("DISCOURSE_ADMIN_PASSWORD", "Admin@1234567890")
 reset_admin_password = ENV.fetch("RESET_ADMIN_PASSWORD", "false").to_s.downcase == "true"
