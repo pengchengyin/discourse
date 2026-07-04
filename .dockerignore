@@ -13,4 +13,5 @@ public/assets
 public/uploads
 vendor/bundle
 
-./data
+# 本地持久化数据目录，包含 PostgreSQL、Redis、uploads，不进入镜像
+data/
